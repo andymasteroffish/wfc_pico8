@@ -130,9 +130,13 @@ end
 
 --update
 function _update()
-	if (btnp(4) or auto_advance) then
-		--printh("advance")
+	if (btnp(4)) then
 		advance()
+	end
+	if auto_advance then
+		for i=1, 4 do
+			advance()
+		end
 	end
 
 
@@ -160,14 +164,54 @@ function _update()
 	end
 
 	--messing with camera
-	if (tester_x*8 - cam_x > 100)  then
+	local scroll_dist = 50
+	local tester_screen_x = (tester_x-buffer_dist)*8 - 4 - cam_x
+	--printh("tester screen: "..tester_screen_x)
+	if (tester_screen_x > 128-scroll_dist)  then
 		cam_x += 0.4
 	end
-
+	if (tester_screen_x < scroll_dist)  then
+		cam_x -= 0.4
+	end
+	
 
 	check_input()
 
 	foreach(actors, move_actor)
+end
+
+function check_input()
+
+	if pl == nil then
+		if btnp(0) then 
+			tester_x -= 1 
+			if (tester_x <= buffer_dist*3) then
+				scroll_right(buffer_dist)
+			end
+		end
+		if btnp(1) then 
+			tester_x += 1 
+			if (tester_x >= output_c-buffer_dist*3) then
+				scroll_left(buffer_dist)
+			end
+		end
+		if btnp(2) then tester_y -= 1 end
+		if btnp(3) then tester_y += 1 end
+	else
+		accel = 0.15
+		if (btn(0)) pl.dx -= accel
+		if (btn(1)) pl.dx += accel
+
+		if btnp(2) then 
+			pl.dy = -1.5
+			printh("bounce")
+		end
+	end
+
+	--spawn the player
+	if btnp(2,1) then
+		pl = make_actor(tester_x-0.5, tester_y-0.5)
+	end
 end
 
 function blow_up_rect(x1,y1, x2,y2)
@@ -221,36 +265,6 @@ function blow_up_rect(x1,y1, x2,y2)
 
 	take_snapshot()
 	is_done = false
-end
-
-function check_input()
-
-	if pl == nil then
-		if btnp(0) then tester_x -= 1 end
-		if btnp(1) then 
-			tester_x += 1 
-			if (tester_x >= output_c-buffer_dist*3) then
-				scroll_left(buffer_dist)
-			end
-		end
-		if btnp(2) then tester_y -= 1 end
-		if btnp(3) then tester_y += 1 end
-	else
-		accel = 0.15
-		if (btn(0)) pl.dx -= accel
-		if (btn(1)) pl.dx += accel
-
-		if btnp(2) then 
-			pl.dy = -1.5
-			printh("bounce")
-		end
-	end
-
-	--spawn the player
-	if btnp(2,1) then
-		pl = make_actor(tester_x-0.5, tester_y-0.5)
-	end
-
 end
 
 
@@ -452,14 +466,40 @@ function scroll_left(num_times)
 		end
 	end
 
-	cam_x -= 8
-	tester_x -= 1
+	move_actors_from_scroll(-1,0)
 
-	if (num_times <= 1) then
-		scroll_cleanup()
-	else
-		scroll_left(num_times-1)
+	if (num_times <= 1) then scroll_cleanup()
+	else 				scroll_left(num_times-1)	end
+end
+
+function scroll_right(num_times)
+	printh("scroll right")
+	for x=output_c, 1, -1 do
+		for y=1, output_r do
+			if x > 1 then
+				output[x][y].copy_from(output[x-1][y])
+			else
+				output[x][y].reset(unique_ids)
+				if (output[x+1][y].state == tile_state_set) then
+					printh(" it form the scroll")
+					local s_tile = get_source_tile_from_id(output[x+1][y].set_id)
+					output[x][y].rule_out_based_on_neighbor(s_tile, dir_w)
+				end
+			end
+		end
 	end
+
+	move_actors_from_scroll(1,0)
+
+	if (num_times <= 1) then scroll_cleanup()
+	else 				scroll_right(num_times-1)	end
+end
+
+function move_actors_from_scroll(tile_dx, tile_dy)
+	cam_x += tile_dx * 8
+	cam_y += tile_dy * 8
+	tester_x += tile_dx
+	tester_y += tile_dy
 end
 
 function scroll_cleanup()

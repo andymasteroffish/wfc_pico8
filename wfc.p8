@@ -19,6 +19,7 @@ unique_ids = {}
 
 --output grid
 output = {}
+output_snap = {}
 output_c = 16
 output_r = 16
 
@@ -373,7 +374,19 @@ function reset_output()
 	end
 
 	is_done = false
-	
+end
+
+--saves the current board state and treats it as root
+function take_snapshot()
+	--save current tile states
+	for x=1, output_c do
+		for y=1, output_r do
+			output_snap[x][y].copy_from(output[x][y])
+		end
+	end
+
+	--get rid of the old history
+	cur_move = root_move
 end
 
 --run through the source tiles and log neighbor frequency
@@ -715,6 +728,17 @@ function make_output_tile(x,y, _unique_ids)
 		t.state = tile_state_set
 		t.set_id = id
 		t.potential_ids = {}
+	end
+
+	t.copy_from = function(other)
+		t.state = other.state
+		t.set_id = other.set_id
+		t.x = other.x
+		t.y = other.y
+		t.potential_ids = {}
+		for i=1, #other.potential_ids do
+			add(t.potential_ids, other.potential_ids[i])
+		end
 	end
 
 	t.get_rand_potential_id = function()

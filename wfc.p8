@@ -35,9 +35,16 @@ auto_advance = true
 root_move = nil 
 cur_move = nil
 
+revert_target_depth = 0
+doing_revert = false
+
 --testing
 tester_x = 1
 tester_y = 1
+
+--camera
+cam_x = 0
+cam_y = 0
 
 --player
 pl = nil
@@ -147,9 +154,17 @@ function _update()
 	end
 
 	--f scrolling
-	if (btnp(1,1)) then
+	if (btnp(1,1) and is_done) then
+		scroll_left()
+		scroll_left()
+		scroll_left()
+		scroll_left()
 		scroll_left()
 	end
+
+	--messing with camera
+	cam_x += 0.1
+	camera(cam_x, cam_y)
 
 	--testing scrolling
 	if (tester_x == output_c-2 and false) then
@@ -243,7 +258,9 @@ end
 
 --draw
 function _draw()
-	rectfill(0,0,128,128, 5)
+	local bg_col = 5
+	if (doing_revert)	bg_col = 12
+	rectfill(0,0,128,128, bg_col)
 	--map(0,0, 0,0, 12, 9)
 
 	--draw output
@@ -292,10 +309,22 @@ function _draw()
 		end
 	end
 
-	print(tostr(tester_x)..","..tostr(tester_y), 2, 9, 7)
-	print(tostr(output[tester_x][tester_y].solid()), 2, 17)
-	print("state: "..tostr(output[tester_x][tester_y].state), 2, 25)
-	print("setid: "..tostr(output[tester_x][tester_y].set_id), 2, 33)
+	local debug_text = tostr(tester_x)..","..tostr(tester_y)
+	debug_text = debug_text.."\n"..tostr(output[tester_x][tester_y].solid())
+	debug_text = debug_text.."\n".."state: "..tostr(output[tester_x][tester_y].state)
+	debug_text = debug_text.."\n".."setid: "..tostr(output[tester_x][tester_y].set_id)
+	debug_text = debug_text.."\n".."depth: "..tostr(cur_move.get_depth())
+
+	local first_move_text = "nil"
+	if (root_move.next != nil) then
+		local move = root_move.next.this_move
+		first_move_text = "x:"..tostr(move.col).." y:"..tostr(move.row).."  id:"..tostr(move.id)
+	end
+	debug_text = debug_text.."\n"..first_move_text
+
+
+	print(debug_text, 2, 9, 7)
+	
 
 	--printh("wut "..tostr(output[flr(tester_x+0.3)][tester_y].solid()))
 
@@ -392,7 +421,11 @@ function take_snapshot()
 	end
 
 	--get rid of the old history
+	--this makes the root move and empty one, but that's ok. it'll look for a good spot to use after it rejects the empty move
+	root_move.prune()
 	cur_move.copy_from(root_move)
+	root_move.next = cur_move
+	cur_move.prev = root_move
 end
 
 --scrolling the grid
@@ -413,6 +446,8 @@ function scroll_left()
 			end
 		end
 	end
+
+	cam_x -= 8
 
 	scroll_cleanup()
 end
@@ -466,12 +501,17 @@ function do_first_move()
 	local start_id = source_tiles[flr(rnd(#source_tiles))+1].id
 	cur_move = make_check_point(root_move)
 	cur_move.move(start_x, start_y, start_id)
-	update_board_from_move(cur_move, true, false)
+	update_board_from_move(cur_move, true, true)
 end
 
 --makes the next move
 function advance()
 	if is_done then	return end
+
+	if doing_revert then
+		do_revert_step()
+		return
+	end
 
 	if need_first_move then
 		do_first_move()
@@ -480,6 +520,8 @@ function advance()
 
 	local old_move = cur_move
 	cur_move = make_check_point(old_move)
+
+	printh("prev move bad moves:"..tostr(#old_move.bad_moves))
 
 	--figure out the lowest number of choices any tile has
 	local low_val = #source_tiles+1
@@ -496,7 +538,7 @@ function advance()
 	for x=1, output_c do
 		for y=1, output_r do
 			if (output[x][y].state == tile_state_active and #output[x][y].potential_ids == low_val) then
-				printh("  low val:"..tostr(x)..","..tostr(y))
+				--printh("  low val:"..tostr(x)..","..tostr(y))
 				add(choices, output[x][y])
 			end
 		end
@@ -539,7 +581,8 @@ function advance()
 
 	--update the board
 	printh("update from advance")
-	update_board_from_move(cur_move, true, false)
+	update_board_from_move(cur_move, true, true)
+
 end
 
 --gets potential source tiles that culd go in a given slot, weighted by frequency
@@ -591,11 +634,12 @@ function update_board_from_move(point, do_validate, print_debug)
 
 	local move = point.this_move
 	if move.col == -1 or move.id == -1 then
-		printh("bad: empty move")
+		printh("empty move, skipping")
+		validate_board()
 		return
 	end
 
-	if print_debug or true then
+	if print_debug then
 		printh("updating board  x:"..tostr(move.col).." y:"..tostr(move.row).."  id:"..tostr(move.id).."  depth: "..tostr(point.get_depth()))
 		printh(" previous bad moves: "..tostr(#point.bad_moves))
 	end
@@ -606,7 +650,7 @@ function update_board_from_move(point, do_validate, print_debug)
 	--rule out anything that previously lead to dead ends
 	for bad in all(point.bad_moves) do
 		output[bad.col][bad.row].rule_out_id(bad.id)
-		printh("hey brah dont do "..tostr(bad.col)..","..tostr(bad.row)..": "..tostr(bad.id))
+		printh(" dont do "..tostr(bad.col)..","..tostr(bad.row)..": "..tostr(bad.id))
 	end
 
 	--update neighbors
@@ -648,12 +692,58 @@ function validate_board()
 	if is_valid == false then
 		printh("move "..tostr(cur_move.get_depth()).." is a problem")
 		cur_move.prev.rule_out_move(cur_move.this_move)
+
+		printh(" ruling out "..tostr(cur_move.this_move.col)..","..tostr(cur_move.this_move.row).." id:"..tostr(cur_move.this_move.id))
+		printh(" total ruled out: "..tostr(#cur_move.prev.bad_moves))
+
 		revert_to_check_point(cur_move.prev)
 	end
 end
 
 --resetting the board to a previous check point
+--sets thigns up to happen one at a time when advanced
 revert_to_check_point = function(point)
+	revert_target_depth= point.get_depth()
+	doing_revert = true
+
+	printh("reverting to "..tostr(revert_target_depth))
+	reset_output()
+
+	if (revert_target_depth == 0) then
+		need_first_move = true
+		printh("full reset")
+	end
+
+	--go back to the first move to start
+	cur_move.copy_from(root_move)
+end
+
+do_revert_step = function()
+	local is_done = false
+
+	local num_steps = 10
+	for i=1, num_steps do
+		--printh("redo move "..tostr(cur_move.get_depth()))
+		cur_move = cur_move.next
+		update_board_from_move(cur_move, true, false)
+		if (cur_move.get_depth() == revert_target_depth) then
+			is_done = true
+			break
+		end
+	end
+
+	if is_done then
+		printh("revert done, pruning")
+		doing_revert = false
+		cur_move.prune()
+
+		--auto_advance = false
+	end
+end
+
+--resetting the board to a previous check point
+--done in one shot, not using
+revert_to_check_point_one_shot = function(point)
 	local this_depth = point.get_depth()
 
 	printh("reverting to "..tostr(point.get_depth()))

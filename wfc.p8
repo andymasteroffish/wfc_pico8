@@ -39,6 +39,10 @@ cur_move = nil
 revert_target_depth = 0
 doing_revert = false
 
+--bandaid time, babey
+last_scroll_dir = -1
+num_reverts_since_stable = 0
+
 --testing
 tester_x = 12
 tester_y = 12
@@ -50,6 +54,9 @@ cam_y = 0
 --player
 pl = nil
 actors = {} --all actors in world
+
+player_start_x = 12
+player_start_y = 12
 
 --https://www.lexaloffle.com/bbs/?tid=2119
 function make_actor(x,y)
@@ -163,17 +170,41 @@ function _update()
 		scroll_left(buffer_dist)
 	end
 
-	--messing with camera
+	--scrolling the camera
 	local scroll_dist = 50
+	local scroll_speed = 0.7
 	local tester_screen_x = (tester_x-buffer_dist)*8 - 4 - cam_x
+	local tester_screen_y = (tester_y-buffer_dist)*8 - 4 - cam_y
 	--printh("tester screen: "..tester_screen_x)
 	if (tester_screen_x > 128-scroll_dist)  then
-		cam_x += 0.4
+		cam_x += scroll_speed
 	end
 	if (tester_screen_x < scroll_dist)  then
-		cam_x -= 0.4
+		cam_x -= scroll_speed
 	end
-	
+	if (tester_screen_y > 128-scroll_dist)  then
+		cam_y += scroll_speed
+	end
+	if (tester_screen_y < scroll_dist)  then
+		cam_y -= scroll_speed
+	end
+
+	--do we need to scroll the grid?
+	if (is_done) then
+		if (tester_x <= buffer_dist*3) then
+			printh(" natural scroll right")
+			scroll_right(buffer_dist)
+		elseif (tester_x >= output_c-buffer_dist*3) then
+			printh(" natural scroll left")
+			scroll_left(buffer_dist)
+		elseif (tester_y <= buffer_dist*3) then
+			printh(" natural scroll down")
+			scroll_down(buffer_dist)
+		elseif (tester_y >= output_r-buffer_dist*3) then
+			printh(" natural scroll up")
+			scroll_up(buffer_dist)
+		end
+	end
 
 	check_input()
 
@@ -183,18 +214,8 @@ end
 function check_input()
 
 	if pl == nil then
-		if btnp(0) then 
-			tester_x -= 1 
-			if (tester_x <= buffer_dist*3) then
-				scroll_right(buffer_dist)
-			end
-		end
-		if btnp(1) then 
-			tester_x += 1 
-			if (tester_x >= output_c-buffer_dist*3) then
-				scroll_left(buffer_dist)
-			end
-		end
+		if btnp(0) then tester_x -= 1 end
+		if btnp(1) then tester_x += 1 end
 		if btnp(2) then tester_y -= 1 end
 		if btnp(3) then tester_y += 1 end
 	else
@@ -303,7 +324,7 @@ function _draw()
 	foreach(actors, draw_actor)	--runs through array, calling function on each
 
 	--draw source
-	if (btn(5)) then
+	if (false) then
 		local src_x = 1
 		local src_y = 1
 		rectfill(src_x-1, src_y-1, src_x+source_c*8+1, src_y+source_r*8+1, 12)
@@ -336,6 +357,7 @@ function _draw()
 	debug_text = debug_text.."\n".."state: "..tostr(output[tester_x][tester_y].state)
 	debug_text = debug_text.."\n".."setid: "..tostr(output[tester_x][tester_y].set_id)
 	debug_text = debug_text.."\n".."depth: "..tostr(cur_move.get_depth())
+	debug_text = debug_text.."\n".."reverts: "..tostr(num_reverts_since_stable)
 
 	local first_move_text = "nil"
 	if (root_move.next != nil) then
@@ -344,11 +366,10 @@ function _draw()
 	end
 	debug_text = debug_text.."\n"..first_move_text
 
-	print(debug_text, 2, 9, 7)
+	if btn(5) then
+		print(debug_text, 2, 9, 7)
+	end
 	
-
-	--printh("wut "..tostr(output[flr(tester_x+0.3)][tester_y].solid()))
-
 	
 end
 
@@ -449,6 +470,7 @@ end
 
 --scrolling the grid
 function scroll_left(num_times)
+	last_scroll_dir = dir_w
 	printh("scroll left")
 	for x=1, output_c do
 		for y=1, output_r do
@@ -457,7 +479,6 @@ function scroll_left(num_times)
 			else
 				output[x][y].reset(unique_ids)
 				if (output[x-1][y].state == tile_state_set) then
-					printh(" it form the scroll")
 					local s_tile = get_source_tile_from_id(output[x-1][y].set_id)
 					output[x][y].rule_out_based_on_neighbor(s_tile, dir_e)
 				end
@@ -473,6 +494,7 @@ function scroll_left(num_times)
 end
 
 function scroll_right(num_times)
+	last_scroll_dir = dir_e
 	printh("scroll right")
 	for x=output_c, 1, -1 do
 		for y=1, output_r do
@@ -481,7 +503,6 @@ function scroll_right(num_times)
 			else
 				output[x][y].reset(unique_ids)
 				if (output[x+1][y].state == tile_state_set) then
-					printh(" it form the scroll")
 					local s_tile = get_source_tile_from_id(output[x+1][y].set_id)
 					output[x][y].rule_out_based_on_neighbor(s_tile, dir_w)
 				end
@@ -493,6 +514,52 @@ function scroll_right(num_times)
 
 	if (num_times <= 1) then scroll_cleanup()
 	else 				scroll_right(num_times-1)	end
+end
+
+function scroll_up(num_times)
+	last_scroll_dir = dir_n
+	printh("scroll up")
+	for x=1, output_c do
+		for y=1, output_r do
+			if y < output_r then
+				output[x][y].copy_from(output[x][y+1])
+			else
+				output[x][y].reset(unique_ids)
+				if (output[x][y-1].state == tile_state_set) then
+					local s_tile = get_source_tile_from_id(output[x][y-1].set_id)
+					output[x][y].rule_out_based_on_neighbor(s_tile, dir_s)
+				end
+			end
+		end
+	end
+
+	move_actors_from_scroll(0,-1)
+
+	if (num_times <= 1) then scroll_cleanup()
+	else 				scroll_up(num_times-1)	end
+end
+
+function scroll_down(num_times)
+	last_scroll_dir = dir_s
+	printh("scroll down")
+	for x=1, output_c do
+		for y=output_r, 1, -1 do
+			if y > 1 then
+				output[x][y].copy_from(output[x][y-1])
+			else
+				output[x][y].reset(unique_ids)
+				if (output[x][y+1].state == tile_state_set) then
+					local s_tile = get_source_tile_from_id(output[x][y+1].set_id)
+					output[x][y].rule_out_based_on_neighbor(s_tile, dir_n)
+				end
+			end
+		end
+	end
+
+	move_actors_from_scroll(0,1)
+
+	if (num_times <= 1) then scroll_cleanup()
+	else 				scroll_down(num_times-1)	end
 end
 
 function move_actors_from_scroll(tile_dx, tile_dy)
@@ -546,12 +613,12 @@ function do_first_move()
 	root_move.prune()
 	cur_move.copy_from(root_move)
 
-	local start_x = flr(output_c/2) --flr(rnd(output_c)+1)
-	local start_y = flr(output_r/2) --flr(rnd(output_r)+1)
-	local start_id = source_tiles[flr(rnd(#source_tiles))+1].id
+	local start_x = player_start_x --flr(rnd(output_c)+1)
+	local start_y = player_start_y  --flr(rnd(output_r)+1)
+	local start_id = 0 --source_tiles[flr(rnd(#source_tiles))+1].id
 	cur_move = make_check_point(root_move)
 	cur_move.move(start_x, start_y, start_id)
-	update_board_from_move(cur_move, true, true)
+	update_board_from_move(cur_move, true, false)
 end
 
 --makes the next move
@@ -571,7 +638,7 @@ function advance()
 	local old_move = cur_move
 	cur_move = make_check_point(old_move)
 
-	printh("prev move bad moves:"..tostr(#old_move.bad_moves))
+	--printh("prev move bad moves:"..tostr(#old_move.bad_moves))
 
 	--figure out the lowest number of choices any tile has
 	local low_val = #source_tiles+1
@@ -598,19 +665,20 @@ function advance()
 	if (#choices == 0) then
 		printh("we done")
 		is_done = true
+		num_reverts_since_stable = 0
 		return
 	end
 
 	--select one at random
 	local this_choice = flr(rnd(#choices)+1)
 
-	printh(" looking at "..tostr(choices[this_choice].x)..","..tostr(choices[this_choice].y).."  status: "..tostr(choices[this_choice].state))
+	--printh(" looking at "..tostr(choices[this_choice].x)..","..tostr(choices[this_choice].y).."  status: "..tostr(choices[this_choice].state))
 
 	--get the frequency for each direction
 	local this_tile_id = -1
 	local tile_choices = get_tile_choices_with_freq(choices[this_choice].x, choices[this_choice].y)
 
-	printh(" i have "..tostr(#tile_choices).." choices")
+	--printh(" i have "..tostr(#tile_choices).." choices")
 
 	local total_freq = 0
 	for t in all(tile_choices) do
@@ -630,14 +698,13 @@ function advance()
 	cur_move.move(choices[this_choice].x, choices[this_choice].y, this_tile_id)
 
 	--update the board
-	printh("update from advance")
-	update_board_from_move(cur_move, true, true)
+	--printh("update from advance")
+	update_board_from_move(cur_move, true, false)
 
 end
 
 --gets potential source tiles that culd go in a given slot, weighted by frequency
 function get_tile_choices_with_freq(col, row)
-	printh("get choices with freq")
 	--get all tiles this once could still potentially be
 	local choices = {}
 	for id in all(output[col][row].potential_ids) do
@@ -755,6 +822,7 @@ end
 revert_to_check_point = function(point)
 	revert_target_depth= point.get_depth()
 	doing_revert = true
+	num_reverts_since_stable += 1
 
 	printh("reverting to "..tostr(revert_target_depth))
 	reset_output()
@@ -769,25 +837,38 @@ revert_to_check_point = function(point)
 end
 
 do_revert_step = function()
-	local is_done = false
+	local revert_is_done = false
 
 	local num_steps = 10
 	for i=1, num_steps do
-		--printh("redo move "..tostr(cur_move.get_depth()))
+		printh("redo move "..tostr(cur_move.get_depth().." of "..tostr(revert_target_depth)))
 		cur_move = cur_move.next
 		update_board_from_move(cur_move, true, false)
 		if (cur_move.get_depth() == revert_target_depth) then
-			is_done = true
+			revert_is_done = true
 			break
 		end
 	end
 
-	if is_done then
+	if revert_is_done then
 		printh("revert done, pruning")
 		doing_revert = false
 		cur_move.prune()
 
 		--auto_advance = false
+	end
+
+	--if this has been going on for a really long time, bail
+	if num_reverts_since_stable > 100 and last_scroll_dir >= 1 then
+		printh("too many reverts, unscroll")
+		num_reverts_since_stable = 0
+		reset_output()
+		if last_scroll_dir == dir_n then scroll_down(buffer_dist) 
+		elseif last_scroll_dir == dir_e then scroll_left(buffer_dist) 
+		elseif last_scroll_dir == dir_s then scroll_up(buffer_dist) 
+		elseif last_scroll_dir == dir_w then scroll_right(buffer_dist) 
+		end
+		doing_revert = false
 	end
 end
 

@@ -20,8 +20,9 @@ unique_ids = {}
 --output grid
 output = {}
 output_snap = {}
-output_c = 16
-output_r = 16
+buffer_dist = 2
+output_c = 16+buffer_dist*2
+output_r = 16+buffer_dist*2
 
 tile_state_inactive = 1
 tile_state_active = 2
@@ -39,8 +40,8 @@ revert_target_depth = 0
 doing_revert = false
 
 --testing
-tester_x = 1
-tester_y = 1
+tester_x = 12
+tester_y = 12
 
 --camera
 cam_x = 0
@@ -155,22 +156,14 @@ function _update()
 
 	--f scrolling
 	if (btnp(1,1) and is_done) then
-		scroll_left()
-		scroll_left()
-		scroll_left()
-		scroll_left()
-		scroll_left()
+		scroll_left(buffer_dist)
 	end
 
 	--messing with camera
-	cam_x += 0.1
-	camera(cam_x, cam_y)
-
-	--testing scrolling
-	if (tester_x == output_c-2 and false) then
-		tester_x -= 1
-		scroll_left()
+	if (tester_x*8 - cam_x > 100)  then
+		cam_x += 0.4
 	end
+
 
 	check_input()
 
@@ -234,7 +227,12 @@ function check_input()
 
 	if pl == nil then
 		if btnp(0) then tester_x -= 1 end
-		if btnp(1) then tester_x += 1 end
+		if btnp(1) then 
+			tester_x += 1 
+			if (tester_x >= output_c-buffer_dist*3) then
+				scroll_left(buffer_dist)
+			end
+		end
 		if btnp(2) then tester_y -= 1 end
 		if btnp(3) then tester_y += 1 end
 	else
@@ -258,14 +256,17 @@ end
 
 --draw
 function _draw()
+	camera(0,0)
 	local bg_col = 5
 	if (doing_revert)	bg_col = 12
-	rectfill(0,0,128,128, bg_col)
+	rectfill(0,0,128, 128, bg_col)
 	--map(0,0, 0,0, 12, 9)
 
+	camera(cam_x, cam_y)
+
 	--draw output
-	local out_x = 0
-	local out_y = 0
+	local out_x = -buffer_dist*8
+	local out_y = -buffer_dist*8
 	for x=1, output_c do
 		for y=1, output_r do
 			local sprite = 1 --grey checker
@@ -299,6 +300,13 @@ function _draw()
 		end
 	end
 
+	--draw tester
+	tester_draw_x = out_x+(tester_x-1)*8
+	tester_draw_y = out_y+(tester_y-1)*8
+	rect(tester_draw_x, tester_draw_y, tester_draw_x+8, tester_draw_y+8, 7 )
+
+
+	camera(0,0)
 
 	--testing
 	if false then
@@ -322,15 +330,12 @@ function _draw()
 	end
 	debug_text = debug_text.."\n"..first_move_text
 
-
 	print(debug_text, 2, 9, 7)
 	
 
 	--printh("wut "..tostr(output[flr(tester_x+0.3)][tester_y].solid()))
 
-	tester_draw_x = out_x+(tester_x-1)*8
-	tester_draw_y = out_y+(tester_y-1)*8
-	rect(tester_draw_x, tester_draw_y, tester_draw_x+8, tester_draw_y+8 )
+	
 end
 
 --https://www.lexaloffle.com/bbs/?tid=2119
@@ -429,7 +434,7 @@ function take_snapshot()
 end
 
 --scrolling the grid
-function scroll_left()
+function scroll_left(num_times)
 	printh("scroll left")
 	for x=1, output_c do
 		for y=1, output_r do
@@ -448,8 +453,13 @@ function scroll_left()
 	end
 
 	cam_x -= 8
+	tester_x -= 1
 
-	scroll_cleanup()
+	if (num_times <= 1) then
+		scroll_cleanup()
+	else
+		scroll_left(num_times-1)
+	end
 end
 
 function scroll_cleanup()
@@ -496,8 +506,8 @@ function do_first_move()
 	root_move.prune()
 	cur_move.copy_from(root_move)
 
-	local start_x = flr(rnd(output_c)+1)
-	local start_y = flr(rnd(output_r)+1)
+	local start_x = flr(output_c/2) --flr(rnd(output_c)+1)
+	local start_y = flr(output_r/2) --flr(rnd(output_r)+1)
 	local start_id = source_tiles[flr(rnd(#source_tiles))+1].id
 	cur_move = make_check_point(root_move)
 	cur_move.move(start_x, start_y, start_id)

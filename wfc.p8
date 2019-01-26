@@ -103,27 +103,18 @@ function _init()
 	printh("unique ids: "..tostr(#unique_ids))
 	for x=1, output_c do
 		add(output, {})
+		add(output_snap, {})
 		for y=1, output_r do
 			add(output[x], make_output_tile(x,y,unique_ids))
+			add(output_snap[x], make_output_tile(x,y,unique_ids))
 		end
 	end
 
 	set_neighbor_info()
 
-	root_move = make_check_point(nil)	
+	root_move = make_check_point(nil)
+	cur_move = make_check_point(nil)	
 
-	--testing
-	if false then
-		printh("checking tile: 1")
-		local s_tile = get_source_tile_from_id(1)
-		local dir_names = {"north","east","south","west"}
-		for d=1, 4 do
-			printh(dir_names[d].."  "..tostr(#s_tile.neighbors[d]))
-			for t in all(s_tile.neighbors[d]) do
-				printh("  sprite "..tostr(t.id).." :"..tostr(t.freq).." occurrences")
-			end
-		end
-	end
 end
 
 
@@ -153,6 +144,17 @@ function _update()
 	--d testing blowing shit up
 	if (btnp(3,1)) then
 		blow_up_rect(tester_x-2, tester_y-2, tester_x+2, tester_y+2)
+	end
+
+	--f scrolling
+	if (btnp(1,1)) then
+		scroll_left()
+	end
+
+	--testing scrolling
+	if (tester_x == output_c-2 and false) then
+		tester_x -= 1
+		scroll_left()
 	end
 
 	check_input()
@@ -209,6 +211,7 @@ function blow_up_rect(x1,y1, x2,y2)
 		end
 	end
 
+	take_snapshot()
 	is_done = false
 end
 
@@ -291,6 +294,8 @@ function _draw()
 
 	print(tostr(tester_x)..","..tostr(tester_y), 2, 9, 7)
 	print(tostr(output[tester_x][tester_y].solid()), 2, 17)
+	print("state: "..tostr(output[tester_x][tester_y].state), 2, 25)
+	print("setid: "..tostr(output[tester_x][tester_y].set_id), 2, 33)
 
 	--printh("wut "..tostr(output[flr(tester_x+0.3)][tester_y].solid()))
 
@@ -369,7 +374,7 @@ function reset_output()
 	printh("reset output")
 	for x=1, output_c do
 		for y=1, output_r do
-			output[x][y].reset(unique_ids)
+			output[x][y].copy_from(output_snap[x][y])
 		end
 	end
 
@@ -378,6 +383,7 @@ end
 
 --saves the current board state and treats it as root
 function take_snapshot()
+	printh("take snapshot")
 	--save current tile states
 	for x=1, output_c do
 		for y=1, output_r do
@@ -386,11 +392,39 @@ function take_snapshot()
 	end
 
 	--get rid of the old history
-	cur_move = root_move
+	cur_move.copy_from(root_move)
+end
+
+--scrolling the grid
+function scroll_left()
+	printh("scroll left")
+	for x=1, output_c do
+		for y=1, output_r do
+			if x < output_c then
+				output[x][y].copy_from(output[x+1][y])
+			else
+				output[x][y].reset(unique_ids)
+				if (output[x-1][y].state == tile_state_set) then
+					printh(" it form the scroll")
+					local s_tile = get_source_tile_from_id(output[x-1][y].set_id)
+					output[x][y].rule_out_based_on_neighbor(s_tile, dir_e)
+				end
+
+			end
+		end
+	end
+
+	scroll_cleanup()
+end
+
+function scroll_cleanup()
+	is_done = false
+	take_snapshot()
 end
 
 --run through the source tiles and log neighbor frequency
 function set_neighbor_info()
+	printh(" set neighbor info")
 	
 	for s in all(source_tiles) do
 		s.reset_neighbor_info()
@@ -425,14 +459,14 @@ function do_first_move()
 	printh("doing first move")
 	need_first_move = false
 	root_move.prune()
-	cur_move = root_move
+	cur_move.copy_from(root_move)
 
 	local start_x = flr(rnd(output_c)+1)
 	local start_y = flr(rnd(output_r)+1)
 	local start_id = source_tiles[flr(rnd(#source_tiles))+1].id
-	cur_move = make_check_point(cur_move)
+	cur_move = make_check_point(root_move)
 	cur_move.move(start_x, start_y, start_id)
-	update_board_from_move(cur_move, false)
+	update_board_from_move(cur_move, true, false)
 end
 
 --makes the next move
@@ -447,7 +481,7 @@ function advance()
 	local old_move = cur_move
 	cur_move = make_check_point(old_move)
 
-	--make a list of the active potential tiles with the fewest posibilities
+	--figure out the lowest number of choices any tile has
 	local low_val = #source_tiles+1
 	for x=1, output_c do
 		for y=1, output_r do
@@ -462,6 +496,7 @@ function advance()
 	for x=1, output_c do
 		for y=1, output_r do
 			if (output[x][y].state == tile_state_active and #output[x][y].potential_ids == low_val) then
+				printh("  low val:"..tostr(x)..","..tostr(y))
 				add(choices, output[x][y])
 			end
 		end
@@ -477,9 +512,13 @@ function advance()
 	--select one at random
 	local this_choice = flr(rnd(#choices)+1)
 
+	printh(" looking at "..tostr(choices[this_choice].x)..","..tostr(choices[this_choice].y).."  status: "..tostr(choices[this_choice].state))
+
 	--get the frequency for each direction
 	local this_tile_id = -1
 	local tile_choices = get_tile_choices_with_freq(choices[this_choice].x, choices[this_choice].y)
+
+	printh(" i have "..tostr(#tile_choices).." choices")
 
 	local total_freq = 0
 	for t in all(tile_choices) do
@@ -499,12 +538,13 @@ function advance()
 	cur_move.move(choices[this_choice].x, choices[this_choice].y, this_tile_id)
 
 	--update the board
-	update_board_from_move(cur_move, false)
+	printh("update from advance")
+	update_board_from_move(cur_move, true, false)
 end
 
 --gets potential source tiles that culd go in a given slot, weighted by frequency
 function get_tile_choices_with_freq(col, row)
-
+	printh("get choices with freq")
 	--get all tiles this once could still potentially be
 	local choices = {}
 	for id in all(output[col][row].potential_ids) do
@@ -546,16 +586,16 @@ function get_tile_choices_with_freq(col, row)
 end
 
 --takes a move and updates the output map
-function update_board_from_move(point, print_debug)
+function update_board_from_move(point, do_validate, print_debug)
 	if is_done then return end
 
 	local move = point.this_move
-	if move.col == -1 then
-		printh("empty move")
+	if move.col == -1 or move.id == -1 then
+		printh("bad: empty move")
 		return
 	end
 
-	if print_debug then
+	if print_debug or true then
 		printh("updating board  x:"..tostr(move.col).." y:"..tostr(move.row).."  id:"..tostr(move.id).."  depth: "..tostr(point.get_depth()))
 		printh(" previous bad moves: "..tostr(#point.bad_moves))
 	end
@@ -589,7 +629,7 @@ function update_board_from_move(point, print_debug)
 	end
 
 	--validate
-	validate_board()
+	if do_validate then validate_board() end
 end
 
 --if any tiles have no viable options, we need to revert
@@ -614,26 +654,28 @@ end
 
 --resetting the board to a previous check point
 revert_to_check_point = function(point)
+	local this_depth = point.get_depth()
+
 	printh("reverting to "..tostr(point.get_depth()))
 	reset_output()
 
-	if (point.get_depth() == 0) then
+	if (this_depth == 0) then
 		need_first_move = true
 		printh("full reset")
 	end
 
-	cur_move = root_move
-	while(cur_move != point) do
-		--printh("redo move "..tostr(cur_move.get_depth()))
+	--you probably can just use a for loop from 0 to this_depth
+	cur_move.copy_from(root_move)
+	while(cur_move.get_depth() != this_depth) do
+		printh("redo move "..tostr(cur_move.get_depth()))
 		--printh("  prev:"..tostr(cur_move.prev))
-		update_board_from_move(cur_move, false)
+		update_board_from_move(cur_move, false, false)
 		cur_move = cur_move.next
 	end
 
-	update_board_from_move(cur_move, false)
+	printh(" do the final update for the revert")
+	update_board_from_move(cur_move, true, false)
 	cur_move.prune()
-
-	printh("done reverting")
 
 	--auto_advance = false
 end
@@ -648,7 +690,7 @@ function get_source_tile_from_id(id)
 		end
 	end
 
-	printh("that is bad")
+	printh("bad: source tile not found for id:"..tostr(id))
 	return nil
 end
 
@@ -733,8 +775,8 @@ function make_output_tile(x,y, _unique_ids)
 	t.copy_from = function(other)
 		t.state = other.state
 		t.set_id = other.set_id
-		t.x = other.x
-		t.y = other.y
+		--t.x = other.x
+		--t.y = other.y
 		t.potential_ids = {}
 		for i=1, #other.potential_ids do
 			add(t.potential_ids, other.potential_ids[i])
@@ -834,6 +876,16 @@ function make_check_point(prev_move)
 		m.prev = prev_move
 		if (m.prev != nil) then
 			m.prev.next = m
+		end
+	end
+
+	m.copy_from = function(other)
+		m.prev = other.prev
+		m.next = other.next
+		m.this_move = make_move_info(other.this_move.col, other.this_move.row, other.this_move.id)
+		m.bad_moves = {}
+		for i=1, #other.bad_moves do
+			add(m.bad_moves,make_move_info(other.bad_moves[i].col, other.bad_moves[i].row, other.bad_moves[i].id))
 		end
 	end
 

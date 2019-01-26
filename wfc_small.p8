@@ -98,6 +98,8 @@ function make_scorpion(x,y)
 	a.type = "scorp"
 	a.speed = 0.05
 	a.spr = 80
+
+	a.bounce_count = 0
 	
 	return a
 end
@@ -200,7 +202,7 @@ end
 
 function start_game()
 	pl = make_player(player_start_x, player_start_y)
-	wraith = make_wraith(1,1)
+	--wraith = make_wraith(1,1)
 end
 
 
@@ -273,6 +275,16 @@ function _update()
 
 	foreach(actors, move_actor)
 
+	--did the player touch anything?
+	for a in all(actors) do
+		if a.type != "player" then
+			if dist(a.x,a.y, pl.x,pl.y) < pl.w + a.w then
+				kill_actor(pl)
+				break
+			end
+		end
+	end
+
 	if (wraith != nil and btn(4,0) == false) then
 		wraith.move()
 
@@ -302,6 +314,9 @@ function _update()
 	end
 end
 
+function dist(x1, y1, x2, y2)
+  return sqrt((x2 - x1)^2 + (y2 - y1)^2)
+end
 
 function check_input()
 
@@ -330,6 +345,19 @@ function check_input()
 		if btnp(2,0) then 
 			pl.dy = pl.jump
 			printh("bounce")
+		end
+
+		if btnp(4,0) then
+			local px = flr(pl.x) + 1
+			local py = flr(pl.y) + 1
+			if pl.dir > 0 then
+				blow_up_rect(px+2,py-1, px+3,py+1)
+				blow_up_rect(px+1,py, output_c,py)
+			else
+				px +=1 --this was too far to the right
+				blow_up_rect(px-3,py-1, px-2,py+1)
+				blow_up_rect(1,py, px-4,py)
+			end
 		end
 	end
 
@@ -514,10 +542,18 @@ function move_actor(a)
 	--moving along x (if clear)
 	if not solid_area(a.x+a.dx, a.y, a.w, a.h) then
 		a.x += a.dx
+		if (a.type == "scorp") then
+			a.bounce_count = 0
+		end
 	else
 		a.dx = 0
 		if (a.type == "scorp") then
 			a.dir *= -1
+			a.bounce_count += 1
+			if (a.bounce_count > 15) then
+				kill_actor(a)
+				return
+			end
 		end
 	end
 
@@ -545,12 +581,7 @@ function move_actor(a)
 		end
 	end
 
-	--if you're in a solid, die --this does not work right now
-	if false then
-		if output[flr(a.x)][flr(a.y)].solid() and a.die_in_solid then
-			kill_actor(a)
-		end
-	end
+	
 
 end
 
@@ -1160,7 +1191,7 @@ function make_output_tile(x,y, _unique_ids)
 		for i=1, #_unique_ids do
 			add(t.potential_ids, _unique_ids[i])
 		end
-		t.t = 0
+		t.t = -flr(rnd(3))
 	end
 
 	t.set = function(id)

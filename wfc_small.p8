@@ -105,6 +105,7 @@ function make_player(x,y)
 	a.spr = 64
 	a.die_off_screen = false
 	a.die_in_solid = false
+	a.on_ladder = false;
 	return a
 end
 
@@ -338,7 +339,7 @@ function _update()
 			end
 		end
 
-		if (output[pl.tx][pl.ty].collectable()) then
+		if (output[pl.tx][pl.ty].has_flag(flag_collectable)) then
 			local sp_id = output[pl.tx][pl.ty].set_id
 			output[pl.tx][pl.ty].set_id = 0
 			if sp_id == 7 then 	--coin
@@ -395,31 +396,47 @@ function check_input()
 
 	--player
 	if (pl != nil) then
-		if btn(0,0) then 
-			pl.dx = -pl.speed
-			pl.dir = -1
-		elseif btn(1,0) then 
-			pl.dx = pl.speed
-			pl.dir = 1
-		else 
-			pl.dx = 0
-		end
+
+
 
 		if btnp(2,0) and pl.grounded then 
 			pl.dy = pl.jump
 		end
 
-		local on_ladder = false
-		if output[pl.tx][pl.ty].state == tile_state_set then
-			if  fget(output[pl.tx][pl.ty].set_id, flag_ladder) then
-				on_ladder = true
+		local touching_ladder = false
+		if output[pl.tx][pl.ty].has_flag(flag_ladder) then
+			touching_ladder = true
+		end
+
+		--climbing up a bit further
+		if touching_ladder == false and pl.ty < output_r then
+			if output[pl.tx][pl.ty+1].has_flag(flag_ladder) and pl.y-flr(pl.y) > 0.75 then
+				touching_ladder = true
 			end
 		end
 
-		if btn(2,0) and on_ladder and pl.dy > -pl.speed then
-			printh("luv to clim")
+		if btn(2,0) and touching_ladder then
 			pl.dy = -pl.speed
 			pl.x = pl.tx-0.5
+			pl.on_ladder = true
+		end
+		if btn(3,0) and touching_ladder then
+			pl.dy = pl.speed
+			pl.x = pl.tx-0.5
+			pl.on_ladder = true
+		end
+
+		--horizontal movement
+		if btn(0,0) then 
+			pl.dx = -pl.speed
+			pl.dir = -1
+			pl.on_ladder = false
+		elseif btn(1,0) then 
+			pl.dx = pl.speed
+			pl.dir = 1
+			pl.on_ladder = false
+		else 
+			pl.dx = 0
 		end
 
 		--horizontal attack
@@ -560,7 +577,7 @@ function _draw()
 			spr(sprite, out_x+(x-1)*8, out_y+(y-1)*8)
 
 			--num choices
-			if output[x][y].state == tile_state_active then
+			if false and output[x][y].state == tile_state_active then
 				print(tostr(#output[x][y].potential_ids), out_x+(x-1)*8+1, out_y+(y-1)*8+1, 7)
 			end
 		end
@@ -582,51 +599,44 @@ function _draw()
 		end
 	end
 
-	--draw tester
-	if (pl != nil) then
-		tester_x = pl.tx
-		tester_y = pl.ty
-	end
-
-	tester_draw_x = out_x+(tester_x-1)*8
-	tester_draw_y = out_y+(tester_y-1)*8
-	rect(tester_draw_x, tester_draw_y, tester_draw_x+8, tester_draw_y+8, 7 )
-
-
-	camera(0,0)
-
-	--testing
 	if false then
-		for i=1, #source_tiles do
-			local x_pos = 2+(i-1)*12
-			spr(source_tiles[i].id, x_pos, 90)
-			print(tostr(source_tiles[i].id), x_pos,100, 7)
+		--draw tester
+		if (pl != nil) then
+			tester_x = pl.tx
+			tester_y = pl.ty
 		end
-	end
 
-	local debug_text = tostr(tester_x)..","..tostr(tester_y)
-	debug_text = debug_text.."\n"..tostr(output[tester_x][tester_y].solid())
-	debug_text = debug_text.."\n".."state: "..tostr(output[tester_x][tester_y].state)
-	debug_text = debug_text.."\n".."setid: "..tostr(output[tester_x][tester_y].set_id)
-	debug_text = debug_text.."\n".."depth: "..tostr(cur_move.get_depth())
-	if (wraith != nil) then
-		debug_text = debug_text.."\n".."wraith x: "..tostr(wraith.x)
-		debug_text = debug_text.."\n".."wraith y: "..tostr(wraith.y)
-	end
-	if (pl != nil) then
-		debug_text = debug_text.."\n".."pl x: "..tostr(pl.x)
-		debug_text = debug_text.."\n".."pl y: "..tostr(pl.y)
-	end
+		tester_draw_x = out_x+(tester_x-1)*8
+		tester_draw_y = out_y+(tester_y-1)*8
+		rect(tester_draw_x, tester_draw_y, tester_draw_x+8, tester_draw_y+8, 7 )
 
-	local first_move_text = "nil"
-	if (root_move.next != nil) then
-		local move = root_move.next.this_move
-		first_move_text = "x:"..tostr(move.col).." y:"..tostr(move.row).."  id:"..tostr(move.id)
-	end
-	debug_text = debug_text.."\n"..first_move_text
 
-	if btn(5) or tester_control then
-		print(debug_text, 2, 9, 7)
+		camera(0,0)
+
+		local debug_text = tostr(tester_x)..","..tostr(tester_y)
+		debug_text = debug_text.."\n"..tostr(output[tester_x][tester_y].has_flag(flag_solid))
+		debug_text = debug_text.."\n".."state: "..tostr(output[tester_x][tester_y].state)
+		debug_text = debug_text.."\n".."setid: "..tostr(output[tester_x][tester_y].set_id)
+		debug_text = debug_text.."\n".."depth: "..tostr(cur_move.get_depth())
+		if (wraith != nil) then
+			debug_text = debug_text.."\n".."wraith x: "..tostr(wraith.x)
+			debug_text = debug_text.."\n".."wraith y: "..tostr(wraith.y)
+		end
+		if (pl != nil) then
+			debug_text = debug_text.."\n".."pl x: "..tostr(pl.x)
+			debug_text = debug_text.."\n".."pl y: "..tostr(pl.y)
+		end
+
+		local first_move_text = "nil"
+		if (root_move.next != nil) then
+			local move = root_move.next.this_move
+			first_move_text = "x:"..tostr(move.col).." y:"..tostr(move.row).."  id:"..tostr(move.id)
+		end
+		debug_text = debug_text.."\n"..first_move_text
+
+		if btn(5) or tester_control then
+			print(debug_text, 2, 9, 7)
+		end
 	end
 end
 
@@ -640,7 +650,7 @@ end
 --https://www.lexaloffle.com/bbs/?tid=2119
 function move_actor(a)
 	--liquid slows ya down
-	if output[a.tx][a.ty].liquid() then
+	if output[a.tx][a.ty].has_flag(flag_liquid) then
 		local w_fric = 0.6
 		a.dx *= w_fric
 		a.dy *= w_fric
@@ -679,10 +689,13 @@ function move_actor(a)
 	a.dx *= a.fric
 	a.dy *= a.fric
 
-	a.grounded = solid_area(a.x, a.y+0.1, a.w, a.h) or output[a.tx][a.ty].liquid()
+	a.grounded = solid_area(a.x, a.y+0.1, a.w, a.h) or output[a.tx][a.ty].has_flag(flag_liquid)
 
 	--movement
 	a.dy += a.grav
+
+	--undo grav when on ladder
+	if a == pl then if a.on_ladder then a.dy = 0 end end
 
 	a.t += 1
 
@@ -724,7 +737,7 @@ function move_actor(a)
 	end
 
 	--if you're on a deadly tile... you die
-	if output[a.tx][a.ty].deadly() and a.killed_by_tiles then
+	if output[a.tx][a.ty].has_flag(flag_deadly) and a.killed_by_tiles then
 		kill_actor(a)
 		return
 	end
@@ -733,6 +746,9 @@ end
 function kill_actor(a)
 	printh("kill "..tostr(a.type))
 	del(actors, a)
+	if a == pl then
+		pl = nil
+	end
 	printh(" actors left:"..tostr(#actors))
 end
 
@@ -749,19 +765,37 @@ function solid_area(x,y,w,h)
 	end
 
 	return
-		output[left_x][top_y].solid() or
-		output[right_x][top_y].solid() or
-		output[left_x][bot_y].solid() or
-		output[right_x][bot_y].solid()
+		output[left_x][top_y].has_flag(flag_solid) or
+		output[right_x][top_y].has_flag(flag_solid) or
+		output[left_x][bot_y].has_flag(flag_solid) or
+		output[right_x][bot_y].has_flag(flag_solid)
 end
 
 --https://www.lexaloffle.com/bbs/?tid=2119
 function draw_actor(a)
 	local sx = out_x + (a.x * 8)-4
-	local sy = out_y + (a.y * 8)-4
+	local sy = out_y + (a.y * 8)-5
 	local flip_x = a.dir < 0
 
 	local spr_id = a.spr + a.frame
+
+	--player
+	if (a == pl) then
+		--standing is default
+		if pl.on_ladder	then
+			spr_id = 67
+			if flr(pl.y*2.0) % 2 == 0 then
+				spr_id += 1
+			end
+			flip_x = false
+		elseif pl.grounded == false then 
+			spr_id = 65 
+		elseif abs(pl.dx) > 0.1 then
+			spr_id = 65
+			if flr(pl.t/4) % 2 == 0 then spr_id += 1 end
+		end
+	end
+
 	spr(spr_id, sx, sy, 1, 1, flip_x, false)
 end
 
@@ -1407,30 +1441,12 @@ function make_output_tile(x,y, _unique_ids)
 	end
 
 	--paraphrased from https://www.lexaloffle.com/bbs/?tid=2119
-	t.solid = function ()
+	t.has_flag = function(flag)
 		if t.state == tile_state_set then
-	 		return fget(t.set_id, flag_solid)
+	 		return fget(t.set_id, flag)
  		end
  		return false
-	end
-	t.collectable = function ()
-		if t.state == tile_state_set then
-	 		return fget(t.set_id, flag_collectable)
- 		end
- 		return false
-	end
-	t.liquid = function ()
-		if t.state == tile_state_set then
-	 		return fget(t.set_id, flag_liquid)
- 		end
- 		return false
-	end
-	t.deadly = function ()
-		if t.state == tile_state_set then
-	 		return fget(t.set_id, flag_deadly)
- 		end
- 		return false
-	end
+ 	end
 
 	t.reset(_unique_ids)
 	return t
@@ -1544,14 +1560,14 @@ __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00011100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00119900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00119900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00555500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00005590000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-009dd500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00005500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00009000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00333000003330000033300000333000003330000033300000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00399300033d9000033d90000d33300000333d000333d00000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00d99d0003d99090033990000533d00000d335000333900000000000000000000000000000000000000000000000000000000000000000000000000000000000
+005555009d55550000d5500005555d000d555500055555d900000000000000000000000000000000000000000000000000000000000000000000000000000000
+05d555000005500009d55d9000d55d000d55d00005d5500000000000000000000000000000000000000000000000000000000000000000000000000000000000
+09ddd90000dddd0000ddd00000ddd00000ddd00000ddd0000dddd000000000000000000000000000000000000000000000000000000000000000000000000000
+00d0d00009d0090000d0d00000d090000090d00000d09000339ddd90000000000000000000000000000000000000000000000000000000000000000000000000
+009090000000090000909000009000000000900009000900399dddd9000000000000000000000000000000000000000000000000000000000000000000000000
 08000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 85580000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 5008e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1560,14 +1576,14 @@ __gfx__
 08555850000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 08855500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 80000550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000003c0000003c000000000000000000000000000000000000000000000000000000000000000000000000000
-008e088000000000000000000000000000000000003ccc00003ccc00000000000000000000000000000000000000000000000000000000000000000000000000
-000550000000000000000000000000000000000003cbbcc003c88cc0000000000000000000000000000000000000000000000000000000000000000000000000
-0005e0000000000000000000000000000000000003cbb3c003c883c0000000000000000000000000000000000000000000000000000000000000000000000000
-0880e8000000000000000000000000000000000000c33c0000c33c00000000000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000000000000000000000cc000000cc000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000001110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000011990000000000000000000003c0000003c000000000000000000000000000000000000000000000000000000000000000000000000000
+008e088000000000001199000000000000000000003ccc00003ccc00000000000000000000000000000000000000000000000000000000000000000000000000
+000550000000000000555500000000000000000003cbbcc003c88cc0000000000000000000000000000000000000000000000000000000000000000000000000
+0005e0000000000000005590000000000000000003cbb3c003c883c0000000000000000000000000000000000000000000000000000000000000000000000000
+0880e80000000000009dd500000000000000000000c33c0000c33c00000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000055000000000000000000000cc000000cc000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000050a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0a025500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00581810000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

@@ -1,2 +1,10 @@
+https://opengameart.org/content/simple-broad-purpose-tileset
+
+collision tutorial:
+https://www.lexaloffle.com/bbs/?tid=2119
+
+
+not using:
+
 https://s4m-ur4i.itch.io/pico-8-pixelart-free-tiles
 https://fisherg.itch.io/pico-8-platformer-assets

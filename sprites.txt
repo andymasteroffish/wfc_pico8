@@ -1,12 +1,18 @@
+Game by Andy Wallace
+andymakes.com
+https://twitter.com/Andy_Makes
+
+Sprites from or based on sprites by surt, Sharm & vk
 https://opengameart.org/content/simple-broad-purpose-tileset
 
-collision tutorial:
+font: 
+Lazytown by Chvy Ray
+https://chevyray.itch.io/pixel-fonts
+
+some code from  this collision tutorial by Zip:
 https://www.lexaloffle.com/bbs/?tid=2119
 
-font: ChevyRay - Lazytown
+WFC by ExUtumno
+https://twitter.com/ExUtumno
+https://github.com/mxgmn/WaveFunctionCollapse
 
-
-not using:
-
-https://s4m-ur4i.itch.io/pico-8-pixelart-free-tiles
-https://fisherg.itch.io/pico-8-platformer-assets

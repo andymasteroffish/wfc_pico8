@@ -8,7 +8,7 @@ dir_s = 3
 dir_w = 4
 
 
-state = "title"	--title, playing, game_over, level_complete
+state = "title"	--title, playing, game_over, win, level_complete
 cur_floor = 1
 
 next_state = ""
@@ -68,11 +68,11 @@ cam_y = 0
 pl = nil
 actors = {} --all actors in world
 
-player_start_x = 12
-player_start_y = 12
+player_start_x = 11
+player_start_y = 11
 
 keys = 0
-keys_needed = {1, 6, 10, 10, 10, 10}
+keys_needed = {1,1,1,1,1} --{2, 6, 10, 12, 15}
 coins = 0
 
 wraith = nil
@@ -199,7 +199,8 @@ function start_map()
 end
 
 function start_game()
-	pl = make_player(player_start_x, player_start_y)
+	make_player_spawn(player_start_x, player_start_y)
+	--pl = make_player(player_start_x, player_start_y)
 	--wraith = make_wraith(1,1)
 end
 
@@ -281,7 +282,7 @@ function _update()
 	foreach(actors, move_actor)
 
 	--did the player touch anything?
-	if (pl != nil and next_state == state) then
+	if (pl != nil and next_state == state and next_state == "playing") then
 		if (output[pl.tx][pl.ty].has_flag(flag_collectable)) then
 			local sp_id = output[pl.tx][pl.ty].set_id
 			output[pl.tx][pl.ty].set_id = 0
@@ -348,6 +349,9 @@ end
 
 function finish_level()
 	change_state("level_complete")
+	if cur_floor == #keys_needed then
+		change_state("win")
+	end
 	pl.dx = 0
 	pl.dy = 0
 	pl.x = pl.tx-0.5
@@ -467,7 +471,7 @@ function blow_up_rect(x1,y1, x2,y2)
 end
 
 function blow_up_rect_circ(x1,y1, x2,y2, range)
-	printh("blow up "..tostr(x1)..","..tostr(y1).." to "..tostr(x2)..","..tostr(y2))
+	--printh("blow up "..tostr(x1)..","..tostr(y1).." to "..tostr(x2)..","..tostr(y2))
 	local start_x = max(1, x1)
 	local end_x = min(output_c, x2)
 	local start_y = max(1, y1)
@@ -476,7 +480,7 @@ function blow_up_rect_circ(x1,y1, x2,y2, range)
 	local cent_x = (x1+x2)/2
 	local cent_y = (y1+y2)/2
 
-	printh("range "..tostr(range))
+	--printh("range "..tostr(range))
 
 	--knock em out
 	for x=start_x, end_x do
@@ -624,6 +628,7 @@ function _draw()
 
 	--game over and level complete
 	if (state == "game_over") then draw_game_over() end
+	if (state == "win") then draw_win() end
 	if (state == "level_complete") then draw_level_complete() end
 
 	if false then
@@ -688,12 +693,6 @@ function update_title()
 			title_t += 1
 			local dist = title_t
 
-			local part2 = false
-			if title_t > 9 then
-				dist = 18-title_t
-				part2 = true
-			end
-
 			for x=1, 16 do
 				for y=1, 16 do
 					if (x==dist or x==17-dist) and (y>=dist and y<=17-dist) then
@@ -707,9 +706,10 @@ function update_title()
 				end
 			end
 
-			if part2 and dist==0 then
+			if title_t > 9 then
 				restart_game()
 			end
+
 		end
 	end
 
@@ -804,6 +804,33 @@ function draw_game_over()
 
 	local y_pos = 5
 	cprint("game over", box_w/2, 8, t_col)
+
+	local x_dist = 10
+	local y_pos += 13
+	print("floors: ", x_dist, y_pos, t_col)
+	rprint(tostr(cur_floor), box_w-x_dist, y_pos, t_col)
+
+	y_pos += 8
+	print("coins: ", x_dist, y_pos, t_col)
+	rprint(tostr(coins), box_w-x_dist, y_pos, t_col)
+
+	y_pos += 11
+	cprint("press z to start\na new adventure", box_w/2, y_pos, t_col)
+end
+
+function draw_win()
+	local box_w = 84
+	local box_h = 55
+	local t_col = 7
+	camera(-(128-box_w)/2, -(128-box_h)/2)
+
+	rectfill(0,0, box_w,box_h, 5)
+	rect(0,0, box_w,box_h, 2)
+	line(1,box_h+1, box_w+1, box_h+1, 1)
+	line(box_w+1,1, box_w+1, box_h+1, 1)
+
+	local y_pos = 5
+	cprint("you win!", box_w/2, 8, t_col)
 
 	local x_dist = 10
 	local y_pos += 13
@@ -938,6 +965,14 @@ function move_actor(a)
 		end
 	end
 
+	if (a.type == "pl_spawn") then
+		if a.t > a.kill_t then
+			kill_actor(a)
+			pl = make_player(player_start_x, player_start_y)
+			return
+		end
+	end
+
 	--if you're off grid, you're a dead mother fucker
 	if a.x < 1 or a.x > output_c or a.y < 1 or a.y > output_c then
 		if a.die_off_screen then
@@ -954,7 +989,7 @@ function move_actor(a)
 end
 
 function kill_actor(a)
-	printh("kill "..tostr(a.type))
+	--printh("kill "..tostr(a.type))
 	del(actors, a)
 	if a == pl then
 		spawn_particles(pl.x,pl.y, 30, {11, 9, 9, 8, 5, 13})
@@ -966,7 +1001,7 @@ function kill_actor(a)
 		spawn_particles(a.x,a.y, 20, {8,14,5})
 	end
 
-	printh(" actors left:"..tostr(#actors))
+	--printh(" actors left:"..tostr(#actors))
 end
 
 function spawn_particles(x,y, num, cols)
@@ -1002,6 +1037,24 @@ function draw_actor(a)
 		local px = out_x + (a.x * 8)
 		local py = out_y + (a.y * 8)
 		pset(px,py, a.col)
+		return
+	end
+
+	if a.type == "pl_spawn" then
+		local dist = 65 * (1.0 - a.t/a.kill_t)
+		local st_ang = a.t * 0.01
+		local cols = {11, 9, 2}
+
+		local num_dots = 6
+
+		for i=1, num_dots do
+			local ang = st_ang + i*(1/num_dots)
+			local px = out_x + (a.x * 8) + cos(ang) * dist
+			local py = out_y + (a.y * 8) + sin(ang) * dist
+			--pset(px,py, cols[i%#cols])
+			rectfill(px,py, px+1,py+1, cols[i%#cols])
+		end
+
 		return
 	end
 
@@ -1093,6 +1146,18 @@ function make_particle(x,y,col)
 	a.fric = 0.99
 	a.type = "particle"
 	a.no_clip = true
+	return a
+end
+
+function make_player_spawn(x,y)
+	local a = make_actor(x,y)
+	a.col = col
+	a.dx = 0
+	a.dy = 0
+	a.type = "pl_spawn"
+	a.no_clip = true
+	a.grav = 0
+	a.kill_t = 30
 	return a
 end
 
@@ -1386,10 +1451,29 @@ function do_first_move()
 	cur_move.move(start_x, start_y+1, start_id)
 	update_board_from_move(cur_move, true, false)
 
+	cur_move = make_check_point(cur_move)
+	cur_move.move(start_x, start_y-1, start_id)
+	update_board_from_move(cur_move, true, false)
+
+	cur_move = make_check_point(cur_move)
+	cur_move.move(start_x-1, start_y+1, start_id)
+	update_board_from_move(cur_move, true, false)
+
+	cur_move = make_check_point(cur_move)
+	cur_move.move(start_x+1, start_y+1, start_id)
+	update_board_from_move(cur_move, true, false)
+
 	local ground_id = 4
 
 	cur_move = make_check_point(cur_move)
 	cur_move.move(start_x, start_y+2, ground_id)
+	update_board_from_move(cur_move, true, false)
+
+	cur_move = make_check_point(cur_move)
+	cur_move.move(start_x-1, start_y+2, ground_id)
+	update_board_from_move(cur_move, true, false)
+
+	cur_move.move(start_x+1, start_y+2, ground_id)
 	update_board_from_move(cur_move, true, false)
 end
 
@@ -1522,7 +1606,6 @@ function get_tile_choices_with_freq(col, row)
 	--check east
 	if col < output_c then
 		if output[col+1][row].state == tile_state_set then
-			printh(" wut:"..tostr(output[col+1][row].set_id))
 			local this_id = output[col+1][row].set_id
 			get_source_tile_from_id(this_id).add_neighbor_freq(dir_w, choices)
 		end
@@ -1641,7 +1724,7 @@ do_revert_step = function()
 
 	local num_steps = 10
 	for i=1, num_steps do
-		printh("redo move "..tostr(cur_move.get_depth().." of "..tostr(revert_target_depth)))
+		--printh("redo move "..tostr(cur_move.get_depth().." of "..tostr(revert_target_depth)))
 		cur_move = cur_move.next
 		update_board_from_move(cur_move, true, false)
 		if (cur_move.get_depth() == revert_target_depth) then

@@ -7,6 +7,10 @@ dir_e = 2
 dir_s = 3
 dir_w = 4
 
+
+state = "playing"	--playing, game_over
+cur_floor = 1
+
 --individual tiles being used
 source_tiles = {}
 
@@ -336,15 +340,6 @@ function _update()
 
 	--did the player touch anything?
 	if (pl != nil) then
-		for a in all(actors) do
-			if a.type != "player" then
-				if dist(a.x,a.y, pl.x,pl.y) < pl.w + a.w and a.kills_player then
-					kill_actor(pl)
-					break
-				end
-			end
-		end
-
 		if (output[pl.tx][pl.ty].has_flag(flag_collectable)) then
 			local sp_id = output[pl.tx][pl.ty].set_id
 			output[pl.tx][pl.ty].set_id = 0
@@ -353,6 +348,15 @@ function _update()
 			end
 			if sp_id == 5 then 	--key
 				keys += 1
+			end
+		end
+
+		for a in all(actors) do
+			if a.type != "player" then
+				if dist(a.x,a.y, pl.x,pl.y) < pl.w + a.w and a.kills_player then
+					kill_actor(pl)
+					break
+				end
 			end
 		end
 	end
@@ -618,16 +622,21 @@ function _draw()
 	end
 
 	--hud
-	camera(0,0)
-	rectfill(1,2, 29,8, 5)
-	rect(0,1, 30,9, 2)
-	spr(5, 3, 2)
-	print("X"..tostr(keys), 13, 3, 7)
-	
-	rectfill(0,11, 30,18, 5)
-	rect(0,11, 30,19, 2)
-	spr(7, 5, 12)
-	print("X"..tostr(coins), 13, 13, 7)
+	if (state == "playing") then
+		camera(0,0)
+		rectfill(1,2, 29,8, 5)
+		rect(0,1, 30,9, 2)
+		spr(5, 3, 2)
+		print("X"..tostr(keys), 13, 3, 7)
+		
+		rectfill(0,11, 30,18, 5)
+		rect(0,11, 30,19, 2)
+		spr(7, 5, 12)
+		print("X"..tostr(coins), 13, 13, 7)
+	end
+
+	--game over
+	if (state == "game_over") then draw_game_over() end
 
 
 	if false then
@@ -670,6 +679,58 @@ function _draw()
 		end
 	end
 end
+
+function draw_game_over()
+	local box_w = 84
+	local box_h = 55
+	local t_col = 7
+	camera(-(128-box_w)/2, -(128-box_h)/2)
+
+	rectfill(0,0, box_w,box_h, 5)
+	rect(0,0, box_w,box_h, 2)
+	line(1,box_h+1, box_w+1, box_h+1, 1)
+	line(box_w+1,1, box_w+1, box_h+1, 1)
+
+	local y_pos = 5
+	cprint("game over", box_w/2, 8, t_col)
+
+	local x_dist = 10
+	local y_pos += 13
+	print("floors: ", x_dist, y_pos, t_col)
+	rprint(tostr(cur_floor), box_w-x_dist, y_pos, t_col)
+
+	y_pos += 8
+	print("coins: ", x_dist, y_pos, t_col)
+	rprint(tostr(coins), box_w-x_dist, y_pos, t_col)
+
+	y_pos += 11
+	cprint("press z to start\na new adventure", box_w/2, y_pos, t_col)
+
+end
+
+function rprint(str, x,y, col)
+	print(str, x-#str*4, y, col)
+end
+
+function cprint(str, x,y, col)
+	lines = {}
+	add(lines, "")
+	l = 1
+	for i=1, #str do
+		if (sub(str, i,i) == '\n') then
+			add(lines, "")
+			l+=1
+		else
+			lines[l] = lines[l]..sub(str, i,i)
+		end
+	end
+
+	for i=1, #lines do
+		local line = lines[i]
+		print(line, x-#line*2, y+(i-1)*6, col)
+	end
+end
+
 
 function get_rand_sprite(t)
 	if (t.t % 4 < 3) then
@@ -780,6 +841,7 @@ function kill_actor(a)
 	del(actors, a)
 	if a == pl then
 		pl = nil
+		state = "game_over"
 	end
 	printh(" actors left:"..tostr(#actors))
 end
